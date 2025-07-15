@@ -1,0 +1,78 @@
+import deriv_api
+import pandas as pd
+import numpy as np
+
+# Deriv API connection
+app_id = 85393
+api_token = 'JPYt4DyndO2A3Y4'
+api = deriv_api.DerivAPI(app_id=app_id, api_token=api_token)
+
+# Trading parameters
+symbol = ' Volatility 100 (1s) Index'
+stake_amount = 10
+trade_duration = 60  # 1 minute
+stop_loss = 50  # adjust according to your risk management
+take_profit = 100  # adjust according to your risk management
+
+# Moving Average settings
+short_ma_period = 10
+long_ma_period = 30
+
+# Bot settings
+trade_frequency = 60  # every minute
+trade_amount_percentage = 0.1  # 10% of account balance
+stop_trading_balance = 50  # stop trading when balance reaches this level
+
+# Performance tracking
+wins = 0
+losses = 0
+
+# Backtesting
+backtest_data = []
+
+def get_moving_averages(prices, short_ma_period, long_ma_period):
+    short_ma = pd.Series(prices).rolling(window=short_ma_period).mean()
+    long_ma = pd.Series(prices).rolling(window=long_ma_period).mean()
+    return short_ma, long_ma
+
+def check_crossover(short_ma, long_ma):
+    if short_ma > long_ma:
+        return 'over'
+    elif short_ma < long_ma:
+        return 'under'
+
+def place_trade(prediction):
+    if prediction == 'over':
+        api.buy_contract('OVER', stake_amount, trade_duration)
+    elif prediction == 'under':
+        api.buy_contract('UNDER', stake_amount, trade_duration)
+
+while True:
+    # Get current price
+    price = api.get_tick(symbol)['tick']['quote']
+
+    # Calculate moving averages
+    prices = api.get_ticks(symbol, count=100)['ticks']
+    short_ma, long_ma = get_moving_averages([p['quote'] for p in prices], short_ma_period, long_ma_period)
+
+    # Check crossover
+    prediction = check_crossover(short_ma.iloc[-1], long_ma.iloc[-1])
+
+    # Place trade
+    place_trade(prediction)
+
+    # Update performance tracking
+    if prediction == 'over' and price > prices[-2]['quote']:
+        wins += 1
+    elif prediction == 'under' and price < prices[-2]['quote']:
+        wins += 1
+    else:
+        losses += 1
+
+    # Check stop trading balance
+    balance = api.get_balance()
+    if balance < stop_trading_balance:
+        break
+
+    # Sleep for trade frequency
+    time.sleep(trade_frequency)
